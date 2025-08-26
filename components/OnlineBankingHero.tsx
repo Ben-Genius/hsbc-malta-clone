@@ -1,24 +1,111 @@
 "use client";
 import { Info, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// --- Supabase client (inline for demo; you can move to /lib/supabaseClient)
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+const supabase = createClientComponentClient();
+
+
+type Phase = "username" | "password";
 
 export default function OnlineBankingLogon() {
+  const [phase, setPhase] = useState<Phase>("username");
   const [username, setUsername] = useState("");
+  const [emailForUser, setEmailForUser] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+
   const [focused, setFocused] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [notRecognised, setNotRecognised] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [rpcError, setRpcError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const isEmptyError = submitted && username.trim() === "" && !focused;
+  // sanity: confirm envs are loaded (won't print secrets)
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.warn("Missing NEXT_PUBLIC_SUPABASE_URL");
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.warn("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    }
+  }, []);
 
-  function handleContinue() {
+  const isEmptyError =
+    submitted &&
+    (phase === "username" ? username.trim() === "" : password === "") &&
+    !focused;
+
+  async function handleContinue() {
     setSubmitted(true);
-    // Simulate server check: if there is text but it's “wrong”, show “not recognised”
-    if (username.trim() === "") {
+    setAuthError(null);
+    setRpcError(null);
+
+    if (phase === "username") {
+      if (username.trim() === "") {
+        setNotRecognised(false);
+        return;
+      }
+
+      setLoading(true);
+      const { data, error, status } = await supabase.rpc("email_for_username", {
+        un: username.trim(),
+      });
+      setLoading(false);
+
+      if (error) {
+        // Show the supabase error to help diagnose (you can replace with a generic message later)
+        setRpcError(
+          `We couldn't check your username (${status}). ${error.message}`
+        );
+        return;
+      }
+
+      const email = (data as string | null) ?? null;
+      if (!email) {
+        setNotRecognised(true);
+        return;
+      }
+
+      setEmailForUser(email);
       setNotRecognised(false);
+      setPhase("password");
+      setSubmitted(false);
+      setFocused(false);
       return;
     }
-    // demo only: anything not equal to "demo" will show the top error
-    setNotRecognised(username.trim().toLowerCase() !== "demo");
+
+    // phase === "password"
+    if (password === "") return;
+
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailForUser!, // resolved from username
+      password,
+    });
+    setLoading(false);
+
+    if (error) {
+      // Common: 400 invalid_credentials
+      setAuthError("The password you entered is incorrect. Please try again.");
+      return;
+    }
+
+    // SUCCESS → change to your app route
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("redirectedFrom") || "/dashboard";
+    window.location.href = next;
+  }
+
+  function backToUsername() {
+    setPhase("username");
+    setPassword("");
+    setAuthError(null);
+    setSubmitted(false);
+    setFocused(false);
   }
 
   return (
@@ -42,26 +129,20 @@ export default function OnlineBankingLogon() {
           <div className="px-8">
             <div className="relative rounded border border-[#e5e7eb] bg-[#e9eef2] p-5 text-[14px] leading-[1.5] text-[#374151]">
               <div className="mb-2 flex items-start gap-3">
-                <span className="mt-[1px] inline-flex  items-center justify-center rounded-full bg-[#0b3a75] text-white">
+                <span className="mt-[1px] inline-flex items-center justify-center rounded-full bg-[#0b3a75] text-white">
                   <Info size={16} />
                 </span>
                 <p className="m-0">
                   <b className="font-semibold">Do not</b> run software that
                   allows others to remotely access your device whilst you are
-                  logged into Online Banking. Customers have reported receiving
-                  a phone call appearing to be from ‘authorities’ offering
-                  assistance to transfer money out of their account. Please{" "}
-                  <b className="font-semibold">beware</b>. Authorities do not
-                  call to assist in the transferring of funds out of customer
-                  accounts. Please be vigilant. You can check our{" "}
+                  logged into Online Banking. Please be vigilant.{" "}
                   <a
                     href="#"
                     className="underline text-[#1f2937] hover:text-black"
                   >
                     information page
-                  </a>{" "}
-                  for more details. If you believe that you have been the victim
-                  of a Fraud Attack, please call us on +356 2148 3809.
+                  </a>
+                  .
                 </p>
               </div>
               <button
@@ -77,10 +158,12 @@ export default function OnlineBankingLogon() {
           {/* Form */}
           <form className="px-8 pt-7 pb-8" onSubmit={(e) => e.preventDefault()}>
             <label
-              htmlFor="username"
+              htmlFor={phase === "username" ? "username" : "password"}
               className="mb-2 inline-flex items-center gap-1 text-[14px] font-medium text-[#374151]"
             >
-              Please enter your username
+              {phase === "username"
+                ? "Please enter your username"
+                : "Please enter your password"}
             </label>
             <div
               aria-hidden
@@ -90,12 +173,11 @@ export default function OnlineBankingLogon() {
               ?
             </div>
 
-            {/* Top error: NOT RECOGNISED */}
-            {notRecognised && (
+            {/* Top alert: username not recognised */}
+            {phase === "username" && notRecognised && (
               <div className="mt-1 mb-3 flex items-start gap-3 text-[16px] leading-6 text-[#7a0c10]">
-                {/* red warning triangle (inline SVG to avoid extra imports) */}
                 <svg
-                  aria-hidden="true"
+                  aria-hidden
                   width="18"
                   height="18"
                   viewBox="0 0 24 24"
@@ -111,64 +193,150 @@ export default function OnlineBankingLogon() {
               </div>
             )}
 
-            {/* INPUT */}
-            <input
-              id="username"
-              name="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onFocus={() => {
-                setFocused(true);
-                setNotRecognised(false);
-              }}
-              onBlur={() => setFocused(false)}
-              className={[
-                "mt-2 block w-full px-3 py-3 text-sm text-[#111827]",
-                "border outline-0 transition-shadow",
-                focused ? "border-0 ring-2 ring-[#3b82f6]" : "ring-0",
-                isEmptyError
-                  ? "border-[#7a0c10] bg-[#f9f2f2]"
-                  : "bg-white border-[#d1d5db]",
-              ].join(" ")}
-            />
+            {/* Top alert: RPC error (permissions, bad URL, etc.) */}
+            {phase === "username" && rpcError && (
+              <div className="mt-1 mb-3 flex items-start gap-3 text-[16px] leading-6 text-[#7a0c10]">
+                <svg
+                  aria-hidden
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  className="mt-1 shrink-0"
+                  fill="#7a0c10"
+                >
+                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                </svg>
+                <p className="m-0 text-sm font-normal">{rpcError}</p>
+              </div>
+            )}
 
-            {/* Inline error: EMPTY */}
+            {/* Top alert: wrong password */}
+            {phase === "password" && authError && (
+              <div className="mt-1 mb-3 flex items-start gap-3 text-[16px] leading-6 text-[#7a0c10]">
+                <svg
+                  aria-hidden
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  className="mt-1 shrink-0"
+                  fill="#7a0c10"
+                >
+                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                </svg>
+                <p className="m-0 text-sm font-normal">{authError}</p>
+              </div>
+            )}
+
+            {/* Inputs */}
+            {phase === "username" ? (
+              <input
+                id="username"
+                name="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onFocus={() => {
+                  setFocused(true);
+                  setNotRecognised(false);
+                  setRpcError(null);
+                }}
+                onBlur={() => setFocused(false)}
+                className={[
+                  "mt-2 block w-full px-3 py-3 text-sm text-[#111827]",
+                  "border outline-0 transition-shadow",
+                  focused ? "border-0 ring-2 ring-[#3b82f6]" : "ring-0",
+                  isEmptyError
+                    ? "border-[#7a0c10] bg-[#f9f2f2]"
+                    : "bg-white border-[#d1d5db]",
+                ].join(" ")}
+              />
+            ) : (
+              <>
+                <div className="mb-2 text-[14px] text-[#6b7280]">
+                  Signing in as <b className="text-[#111827]">{username}</b>{" "}
+                  <button
+                    type="button"
+                    onClick={backToUsername}
+                    className="underline ml-2"
+                  >
+                    Change
+                  </button>
+                </div>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  className={[
+                    "mt-2 block w-full px-3 py-3 text-sm text-[#111827]",
+                    "border outline-0 transition-shadow",
+                    focused ? "border-0 ring-2 ring-[#3b82f6]" : "ring-0",
+                    isEmptyError
+                      ? "border-[#7a0c10] bg-[#f9f2f2]"
+                      : "bg-white border-[#d1d5db]",
+                  ].join(" ")}
+                />
+              </>
+            )}
+
+            {/* Inline empty error */}
             {isEmptyError && (
               <div className="mt-2 flex items-center gap-2 text-[16px] text-[#7a0c10]">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#7a0c10] text-[12px] leading-none">
                   ×
                 </span>
-                <p className="m-0 text-sm ">You must provide your username.</p>
+                <p className="m-0 text-sm ">
+                  {phase === "username"
+                    ? "You must provide your username."
+                    : "You must provide your password."}
+                </p>
               </div>
             )}
 
             {/* Remember me */}
-            <div className="mt-5 flex items-center gap-2">
-              <input
-                id="remember"
-                type="checkbox"
-                className="h-4 w-4 rounded border-[#d1d5db]"
-              />
-              <label
-                htmlFor="remember"
-                className="text-[14px] text-[#374151] select-none"
-              >
-                Remember me
-              </label>
-            </div>
+            {phase === "username" && (
+              <div className="mt-5 flex items-center gap-2">
+                <input
+                  id="remember"
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[#d1d5db]"
+                />
+                <label
+                  htmlFor="remember"
+                  className="text-[14px] text-[#374151] select-none"
+                >
+                  Remember me
+                </label>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-8 flex justify-end">
               <button
                 type="button"
-                disabled={username.length === 0}
                 onClick={handleContinue}
-                className={`bg-[#db0011] px-6 py-3 text-[16px] font-normal text-white transition-opacity hover:cursor-pointer focus:outline-none  focus:ring-[#db0011] ${
-                  username.length === 0 && "opacity-30"
-                } ${isEmptyError && "opacity-30 disabled"}`}
+                disabled={
+                  loading ||
+                  (phase === "username"
+                    ? username.trim() === ""
+                    : password === "")
+                }
+                className={`bg-[#db0011] px-6 py-3 text-[16px] font-normal text-white transition-opacity focus:outline-none focus:ring-[#db0011] ${
+                  (loading ||
+                    (phase === "username"
+                      ? username.trim() === ""
+                      : password === "")) &&
+                  "opacity-30"
+                }`}
               >
-                Continue
+                {loading
+                  ? "Please wait…"
+                  : phase === "username"
+                  ? "Continue"
+                  : "Log on"}
               </button>
             </div>
           </form>
