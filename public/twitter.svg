@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 19.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="Layer_twitter" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 128 128" style="enable-background:new 0 0 128 128;" xml:space="preserve">
+<style type="text/css">
+	*:hover {
+        cursor: pointer;
+    }
+	.st1{fill:#000000;}
+	.st2{fill:#FFFFFF;}
+</style>
+<g>
+<path class="st1" d="M64,128L64,128C28.7,128,0,99.3,0,64v0C0,28.7,28.7,0,64,0h0c35.3,0,64,28.7,64,64v0 C128,99.3,99.3,128,64,128z"/>
+<path class="st2" d="M 69.4123 59.6441 L 90.5902 35.5556 H 85.5719 L 67.1829 56.4715 L 52.4956 35.5556 H 35.5556 L 57.7657 67.184 L 35.5556 92.4444 H 40.5742 L 59.9936 70.3566 L 75.5044 92.4444 H 92.4444 L 69.4108 59.6441 H 69.4123 Z M 62.5383 67.4624 L 60.288 64.3132 L 42.3826 39.2523 H 50.0914 L 64.5412 59.4773 L 66.7915 62.6265 L 85.574 88.9156 H 77.8656 L 62.5383 67.4638 V 67.4624 Z"/>
+</g>
+
+</svg>
